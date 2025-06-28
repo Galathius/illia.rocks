@@ -29,7 +29,6 @@ body {
 
 .rock.dragging {
     z-index: 20;
-    transform: scale(1.2);
 }
 
 .avatar {

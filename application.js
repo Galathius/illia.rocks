@@ -102,12 +102,18 @@ function dragMoveListener(event) {
     var x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx;
     var y = (parseFloat(target.getAttribute('data-y')) || 0) + event.dy;
 
-    // Translate the element
-    target.style.transform = 'translate(' + x + 'px, ' + y + 'px)';
+    // Calculate rotation based on movement distance for rolling effect
+    var distance = Math.sqrt(event.dx * event.dx + event.dy * event.dy);
+    var currentRotation = parseFloat(target.getAttribute('data-rotation')) || 0;
+    var newRotation = currentRotation + (distance * 2); // Adjust multiplier for roll speed
+    
+    // Translate and rotate the element
+    target.style.transform = 'translate(' + x + 'px, ' + y + 'px) scale(1.2) rotate(' + newRotation + 'deg)';
 
-    // Update the position attributes
+    // Update the position and rotation attributes
     target.setAttribute('data-x', x);
     target.setAttribute('data-y', y);
+    target.setAttribute('data-rotation', newRotation);
 }
 
 
