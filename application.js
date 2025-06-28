@@ -31,6 +31,11 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             rock.style.fontSize = ROCK_SIZES[sizeIndex];
             
+            // Add random initial rotation
+            const randomRotation = Math.random() * 360;
+            rock.setAttribute('data-rotation', randomRotation);
+            rock.style.transform = `rotate(${randomRotation}deg)`;
+            
             // Position rocks to completely cover the centered avatar
             // Avatar is centered in 150x150px container
             
