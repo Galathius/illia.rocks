@@ -1,13 +1,6 @@
-// Wait for DOM to be ready
 document.addEventListener('DOMContentLoaded', function() {
-    // Configuration
     const ROCK_PILE_AREA = document.getElementById('rockPile');
-    const AVATAR = document.getElementById('avatar');
-    
-    // Track which rocks are still in the pile area
-    let rocksInPile = new Set();
-    
-    // Rock emoji and size
+
     const ROCK_EMOJI = '🪨';
     const ROCK_SIZES = ['3rem', '2.5rem', '2rem'];
     
@@ -17,7 +10,6 @@ document.addEventListener('DOMContentLoaded', function() {
             rock.className = 'rock';
             rock.dataset.rock = i.toString();
             
-            // Use rock emoji with consistent size
             rock.textContent = ROCK_EMOJI;
             // 50% medium (2.0rem), 25% large (3rem), 25% small (1rem)
             const rand = Math.random();
@@ -56,22 +48,16 @@ document.addEventListener('DOMContentLoaded', function() {
             rock.style.left = finalX + 'px';
             rock.style.top = finalY + 'px';
             
-            // Add to pile area and tracking set
             ROCK_PILE_AREA.appendChild(rock);
-            rocksInPile.add(i.toString());
         }
     }
     
-    // Generate the rocks
     generateRocks();
     
-    // Get all rocks after generation
     const ROCKS = document.querySelectorAll('.rock');
 
-    // Make rocks draggable with interact.js
     interact('.rock')
     .draggable({
-        // Enable inertial throwing
         inertia: true,
         
         // Allow dragging anywhere on the page
@@ -146,7 +132,7 @@ function dragMoveListener(event) {
         }
     });
 
-    // Optional: Add reset functionality (double-click to reset all rocks)
+    // Add reset functionality (double-click to reset all rocks)
     document.addEventListener('dblclick', function() {
         ROCKS.forEach(rock => {
             rock.style.transform = 'translate(0px, 0px)';
