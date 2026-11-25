@@ -107,6 +107,7 @@ body {
 }
 
 .gather,
+.dynamite,
 .close {
     padding: 0.5rem 1rem;
     border: 3px solid var(--ink);
@@ -117,10 +118,30 @@ body {
     cursor: pointer;
 }
 
-.gather:hover,
-.close:hover {
-    background: var(--ink);
-    color: var(--paper);
+.dynamite {
+    background: #c9201d;
+    color: #fff;
+}
+
+@media (hover: hover) {
+    .gather:hover,
+    .dynamite:hover,
+    .close:hover {
+        background: var(--ink);
+        color: var(--paper);
+    }
+}
+
+.boom .intro {
+    animation: boom 0.45s linear;
+}
+
+@keyframes boom {
+    15% { transform: translate(-10px, 7px) rotate(-0.6deg); }
+    30% { transform: translate(9px, -8px) rotate(0.5deg); }
+    50% { transform: translate(-6px, -4px) rotate(-0.3deg); }
+    70% { transform: translate(4px, 3px); }
+    85% { transform: translate(-2px, 1px); }
 }
 
 :focus-visible {
@@ -142,18 +163,155 @@ body {
     cursor: pointer;
 }
 
+.flyer {
+    position: relative;
+    display: block;
+    transform-origin: 50% 100%;
+    transition: scale 0.2s ease-out;
+}
+
+.avatar:hover .flyer {
+    scale: 1.05;
+}
+
 .avatar img {
     display: block;
     width: 100%;
-    height: 100%;
-    transform-origin: 50% 100%;
-    transition: transform 0.2s ease-out;
+    height: auto;
     -webkit-user-drag: none;
     user-select: none;
 }
 
-.avatar:hover img {
-    transform: scale(1.05);
+.avatar .propeller {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform-origin: 30.5% 50%; /* the hub of the propeller */
+}
+
+/* Dug out for the first time: the cap flies away, and a stork lives underneath. */
+.cap {
+    position: absolute;
+    inset: 0 0 auto;
+    transform-origin: 38% 100%;
+}
+
+.stork {
+    position: absolute;
+    top: -25.5%; /* the nest rests on the top of the head */
+    left: 11.5%;
+    width: 56%;
+    overflow: visible;
+    visibility: hidden;
+}
+
+.bird {
+    transform-origin: 94px 184px;
+}
+
+.beak-top,
+.beak-bottom {
+    transform-origin: 148px 46px;
+}
+
+.hatless .cap {
+    animation: cap 11s linear;
+}
+
+.hatless .stork {
+    transform-origin: 50% 100%;
+    animation: nest 11s linear;
+}
+
+.hatless .bird {
+    animation: bird 11s linear;
+}
+
+.hatless .beak-top {
+    animation: clack-top 0.22s ease-in-out 4.2s 24 alternate;
+}
+
+.hatless .beak-bottom {
+    animation: clack-bottom 0.22s ease-in-out 4.2s 24 alternate;
+}
+
+@keyframes cap {
+    0%, 12% { transform: none; }
+    3%, 9% { transform: translateY(-1%) rotate(-2.5deg); }
+    6% { transform: translateY(-3%) rotate(2.5deg); }
+    15% { transform: translateY(-40%) rotate(6deg); animation-timing-function: ease-in; }
+    27% { transform: translate(7vw, -45svh) rotate(14deg); }
+    36%, 70% { transform: translate(4vw, calc(-100svh - 100%)) rotate(-4deg); animation-timing-function: ease-out; }
+    84% { transform: translate(-4vw, -38svh) rotate(-10deg); animation-timing-function: ease-in-out; }
+    97%, 100% { transform: none; }
+}
+
+/* Small enough to fit under the cap whenever the cap is on. */
+@keyframes nest {
+    0%, 12% { visibility: visible; transform: scale(0.3); }
+    18%, 90% { visibility: visible; transform: none; }
+    95%, 100% { visibility: visible; transform: scale(0.3); }
+}
+
+@keyframes bird {
+    0%, 22% { transform: translateY(22px) scale(0.17); }
+    27% { transform: scale(1.08); }
+    30%, 45% { transform: none; }
+    50%, 58% { transform: rotate(-5deg); }
+    64%, 84% { transform: none; }
+    89%, 100% { transform: translateY(22px) scale(0.17); }
+}
+
+@keyframes clack-top {
+    to { transform: rotate(-11deg); }
+}
+
+@keyframes clack-bottom {
+    to { transform: rotate(9deg); }
+}
+
+/* Dug out again: this time the whole head flies away and comes back behind the rocks. */
+.avatar.flying {
+    pointer-events: none;
+    animation: flight-layer 8s linear;
+}
+
+.flying .flyer {
+    animation: flight 8s linear;
+}
+
+.flying .propeller,
+.hatless .propeller {
+    animation: spin 0.32s linear infinite;
+}
+
+@keyframes flight-layer {
+    from, 60% { z-index: 2; }
+    61%, to { z-index: 0; }
+}
+
+@keyframes flight {
+    0%, 16% { transform: none; }
+    4%, 12% { transform: translateX(-2px) rotate(-1.5deg); }
+    8% { transform: translateX(2px) rotate(1.5deg); }
+    20% { transform: translateY(-12%) rotate(4deg); animation-timing-function: ease-in; }
+    36% { transform: translate(8vw, -45svh) rotate(9deg); }
+    50%, 62% { transform: translate(0, calc(-100svh - 130%)) rotate(-4deg); animation-timing-function: ease-out; }
+    78% { transform: translate(-5vw, -35svh) rotate(-6deg); animation-timing-function: ease-in-out; }
+    94%, 100% { transform: none; }
+}
+
+@keyframes spin {
+    to { transform: rotateY(1turn); }
+}
+
+.sooty .flyer {
+    animation: soot 3.5s ease-in;
+}
+
+@keyframes soot {
+    from, 55% { filter: grayscale(1) brightness(0.3); }
+    to { filter: grayscale(0) brightness(1); }
 }
 
 .avatar:focus-visible {
@@ -245,6 +403,16 @@ body {
     margin: 0 0 0.75rem;
 }
 
+.story form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.close[hidden] {
+    display: none;
+}
+
 .story blockquote {
     margin: 0 0 0.75rem;
 }
@@ -309,7 +477,12 @@ body {
         animation: none;
     }
 
-    .avatar img {
+    .boom .intro,
+    .sooty .flyer {
+        animation: none;
+    }
+
+    .flyer {
         transition: none;
     }
 }

@@ -3,8 +3,10 @@
 
     const MIN_ROCKS = 14;
     const MAX_ROCKS = 46;
+    const CAP_ROCKS = 90; // including the ones poured in by typing a secret word
+    const HOME = ['камень', 'Belarusian'];
+    const ALWAYS = [HOME, ['stone', 'English']];
     const ENGRAVED = [
-        ['камень', 'Russian'],
         ['камінь', 'Ukrainian'],
         ['kamień', 'Polish'],
         ['kámen', 'Czech'],
@@ -15,15 +17,29 @@
     ];
     const HINT_BURIED = 'Someone is buried here. Throw some rocks.';
     const HINT_FOUND = 'There I am! Tap me to hear about the rocks.';
+    const HINT_FLYING = 'Free at last!';
+    const HINT_CAP = 'Hold on to your cap!';
+    const HINT_STORK = 'A stork lives under the cap. In Belarusian it is “бусел”.';
+    const HINT_FUSE = 'Fire in the hole!';
+    const HINT_GOLD = 'You found the golden rock. One visit in twenty has it.';
+    const SECRET_WORDS = ['rock', 'камень', 'kamen', 'kamień'];
+    const GOLD_CHANCE = 1 / 20;
+    const BOOM_WORD = 'BOOM!';
 
     // Hue and saturation of the granite; lightness comes from the light direction.
     const GRANITES = ['225 7%', '32 7%', '205 10%', '270 5%'];
+    const GOLD = '43 88%';
     const INK = '#211c24';
+    const RED = '#e2302b';
+    const PAPER = '#fff';
     const LIGHT = Vector.normalise({ x: -0.45, y: -0.9 });
 
     const STEP = 1000 / 60;
     const MAX_SPEED = 45;
     const GATHER_MS = 650;
+    const FUSE_MS = 2600;
+    const BLAST_MS = 1000;
+    const COLLIDE_ALL = 0xffffffff;
     const TAP_MS = 300;
     const TAP_SLOP = 8;
     const WALL = 400;
@@ -34,17 +50,27 @@
     const story = document.getElementById('story');
     const hint = document.getElementById('hint');
     const gatherButton = document.getElementById('gather');
+    const dynamiteButton = document.getElementById('dynamite');
+    const tiltButton = document.getElementById('tilt');
     const ctx = stage.getContext('2d');
 
     const engine = Engine.create({ enableSleeping: true, positionIterations: 10, velocityIterations: 8 });
     const grabs = new Map(); // pointerId -> { constraint, rock, start, moved }
+    const hasGold = location.hash === '#gold' || Math.random() < GOLD_CHANCE;
     let rocks = [];
+    let blownAway = []; // rocks that left the screen after an explosion
+    let dynamite = null; // { body, fuse }
+    let blast = null; // { x, y, age, spikes }
+    let debris = [];
     let bounds = [];
     let width = 0;
     let height = 0;
     let builtFor = 0; // avatar height the current rocks were made for
     let gathering = null;
     let found = false;
+    let landing = true; // rocks are still falling, too early to say who is buried
+    let flown = false;
+    let flights = 0;
     let frame = 0;
     let lastTime = 0;
     let backlog = 0;
@@ -95,16 +121,18 @@
         return rock;
     }
 
+    function createPlainRock(unit) {
+        const size = unit * random(0.6, 1.35);
+        const points = outline(size * random(1, 1.3), size, Math.round(random(6, 9)));
+        return createRock(points, { inset: [0.4, 0.78] });
+    }
+
     function createRocks() {
         const unit = avatar.offsetHeight * 0.17;
         // Enough to cover the avatar, without burying the text on a narrow screen.
         const total = clamp(Math.round((width / avatar.offsetHeight) * 9.5), MIN_ROCKS, MAX_ROCKS);
-        const words = shuffle(ENGRAVED).slice(0, Math.round(total / 4));
-        const plain = Array.from({ length: total - words.length }, () => {
-            const size = unit * random(0.6, 1.35);
-            const points = outline(size * random(1, 1.3), size, Math.round(random(6, 9)));
-            return createRock(points, { inset: [0.4, 0.78] });
-        });
+        const words = [...ALWAYS, ...shuffle(ENGRAVED).slice(0, Math.round(total / 4) - ALWAYS.length)];
+        const plain = Array.from({ length: total - words.length }, () => createPlainRock(unit));
         const engraved = words.map(([word, language]) => {
             const halfWidth = unit * (0.75 + word.length * 0.2);
             const rock = createRock(outline(halfWidth, unit * 0.95, 10), { inset: [0.8, 0.86], word, language });
@@ -112,7 +140,14 @@
             return rock;
         });
 
-        return shuffle([...plain, ...engraved]);
+        const all = shuffle([...plain, ...engraved]);
+        if (hasGold) {
+            const gold = plain.reduce((biggest, rock) => (rock.area > biggest.area ? rock : biggest));
+            Object.assign(gold.look, { granite: GOLD, tone: 0, gold: true });
+            // Last in the list means drawn on top.
+            all.push(...all.splice(all.indexOf(gold), 1));
+        }
+        return all;
     }
 
     // A narrow column above the avatar, so that the falling rocks form a heap on it.
@@ -168,6 +203,9 @@
     function build() {
         grabs.forEach((_, id) => release(id));
         gathering = null;
+        if (dynamite) Composite.remove(engine.world, dynamite.body);
+        dynamite = null;
+        blownAway = [];
         Composite.remove(engine.world, rocks);
         builtFor = avatar.offsetHeight;
         rocks = createRocks();
@@ -185,6 +223,7 @@
 
     function wake() {
         for (const rock of rocks) Sleeping.set(rock, false);
+        if (dynamite) Sleeping.set(dynamite.body, false);
         if (!frame) {
             lastTime = 0;
             frame = requestAnimationFrame(tick);
@@ -193,14 +232,26 @@
 
     function step() {
         Engine.update(engine, STEP);
-        for (const rock of rocks) {
-            if (rock.speed > MAX_SPEED) {
-                Body.setVelocity(rock, Vector.mult(Vector.normalise(rock.velocity), MAX_SPEED));
+        for (const body of things()) {
+            if (body.speed > MAX_SPEED) {
+                Body.setVelocity(body, Vector.mult(Vector.normalise(body.velocity), MAX_SPEED));
             }
-            const { x, y } = rock.position;
-            if (x < 0 || x > width || y > height) keepInside(rock);
+            const { x, y } = body.position;
+            if (body.flung) {
+                if (x < -200 || x > width + 200 || y < -200 || y > height + 200) blowAway(body);
+            } else if (x < 0 || x > width || y > height) {
+                keepInside(body);
+            }
+        }
+
+        stepEffects();
+        if (dynamite) {
+            dynamite.fuse -= STEP;
+            if (dynamite.fuse <= 0) explode();
         }
     }
+
+    const things = () => (dynamite ? [...rocks, dynamite.body] : rocks);
 
     function tick(time) {
         frame = 0;
@@ -215,7 +266,8 @@
         draw();
         if (!gathering) checkFound();
 
-        const busy = gathering || grabs.size > 0 || rocks.some((rock) => !rock.isSleeping);
+        const busy = gathering || grabs.size > 0 || dynamite || blast || debris.length > 0
+            || rocks.some((rock) => !rock.isSleeping);
         if (busy) frame = requestAnimationFrame(tick);
     }
 
@@ -227,6 +279,7 @@
     }
 
     function drop(bottom) {
+        landing = true;
         rocks.forEach((rock, i) => {
             Body.setPosition(rock, columnSpot(i, bottom));
             Body.setVelocity(rock, { x: 0, y: 0 });
@@ -243,6 +296,9 @@
         grabs.forEach((_, id) => release(id));
         hint.textContent = HINT_BURIED;
         found = false;
+        flown = false;
+        landing = true;
+        callBack();
         if (reducedMotion.matches) {
             drop(height - avatar.offsetHeight);
             return;
@@ -255,6 +311,21 @@
             moves: byHeight.map((rock, i) => ({ rock, from: { ...rock.position }, to: columnSpot(i, bottom) })),
         };
         wake();
+    }
+
+    // Returns the rocks that an explosion threw off the screen.
+    function callBack() {
+        for (const rock of rocks) {
+            rock.flung = false;
+            rock.collisionFilter.mask = COLLIDE_ALL;
+        }
+        for (const rock of blownAway) {
+            Body.setPosition(rock, { x: Math.random() < 0.5 ? -100 : width + 100, y: random(0, height) });
+            Composite.add(engine.world, rock);
+        }
+        // Golden rock stays last, on top of the others.
+        rocks = [...rocks, ...blownAway].sort((a, b) => Boolean(a.look.gold) - Boolean(b.look.gold));
+        blownAway = [];
     }
 
     function moveGathering(time) {
@@ -274,9 +345,167 @@
         }
     }
 
+    /* ---------- Dynamite ---------- */
+
+    function throwDynamite() {
+        if (dynamite || blast || gathering) return;
+        const size = avatar.offsetHeight * 0.36;
+        if (reducedMotion.matches) {
+            explode({ x: width / 2, y: height - avatar.offsetHeight / 2 });
+            return;
+        }
+
+        const body = Bodies.rectangle(width / 2 + random(-20, 20), -size, size * 1.1, size * 0.8, {
+            friction: 0.7,
+            frictionAir: 0.012,
+            restitution: 0.2,
+            density: 0.003,
+            angle: random(-0.4, 0.4),
+            sleepThreshold: Infinity,
+        });
+        Body.setAngularVelocity(body, random(-0.08, 0.08));
+        Composite.add(engine.world, body);
+        dynamite = { body, size, fuse: FUSE_MS };
+        hint.textContent = HINT_FUSE;
+        wake();
+    }
+
+    function explode(at = { ...dynamite.body.position }) {
+        grabs.forEach((_, id) => release(id));
+        if (dynamite) Composite.remove(engine.world, dynamite.body);
+        dynamite = null;
+        landing = false;
+        hint.textContent = found ? HINT_FOUND : HINT_BURIED;
+
+        const spikes = Array.from({ length: 15 }, () => random(0.85, 1.15));
+        blast = { x: clamp(at.x, width * 0.2, width * 0.8), y: at.y, age: 0, spikes };
+        boomSound();
+
+        if (reducedMotion.matches) {
+            [...rocks].forEach(blowAway);
+            wake();
+            return;
+        }
+
+        const reach = avatar.offsetHeight * 0.75;
+        for (const rock of [...rocks]) {
+            const away = Vector.sub(rock.position, at);
+            if (Vector.magnitude(away) < reach) {
+                shatter(rock, at);
+                blowAway(rock);
+                continue;
+            }
+            const push = Vector.mult(Vector.normalise(away), random(24, 40));
+            rock.flung = true;
+            rock.collisionFilter.mask = 0; // nothing stops it, not even the walls
+            Sleeping.set(rock, false);
+            Body.setVelocity(rock, { x: push.x, y: push.y - random(6, 16) });
+            Body.setAngularVelocity(rock, random(-0.4, 0.4));
+        }
+        for (let i = 0; i < 12; i++) {
+            const angle = random(0, Math.PI * 2);
+            const speed = random(2, 9);
+            debris.push({
+                x: at.x, y: at.y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed - 3,
+                puff: avatar.offsetHeight * random(0.1, 0.24), age: 0, life: random(700, 1300),
+            });
+        }
+
+        restart(document.documentElement, 'boom', 450);
+        const toAvatar = Math.hypot(at.x - width / 2, at.y - (height - avatar.offsetHeight / 2));
+        if (toAvatar < avatar.offsetHeight * 2 && !avatar.matches('.flying, .hatless')) restart(avatar, 'sooty', 3500);
+        wake();
+    }
+
+    function blowAway(rock) {
+        Composite.remove(engine.world, rock);
+        rock.flung = false;
+        rock.collisionFilter.mask = COLLIDE_ALL;
+        rocks = rocks.filter((other) => other !== rock);
+        blownAway.push(rock);
+    }
+
+    // Splits the rock into triangles that fly apart; they are only drawn, not simulated.
+    function shatter(rock, at) {
+        const { granite, tone } = rock.look;
+        rock.vertices.forEach((a, i) => {
+            const b = rock.vertices[(i + 1) % rock.vertices.length];
+            const middle = { x: (a.x + b.x + rock.position.x) / 3, y: (a.y + b.y + rock.position.y) / 3 };
+            const push = Vector.mult(Vector.normalise(Vector.sub(middle, at)), random(8, 22));
+            debris.push({
+                ...middle, vx: push.x + random(-3, 3), vy: push.y - random(2, 10),
+                angle: 0, spin: random(-0.4, 0.4), age: 0, life: random(900, 1500),
+                points: [a, b, rock.position].map((v) => Vector.sub(v, middle)),
+                color: `hsl(${granite} ${random(45, 65) + tone}%)`,
+            });
+        });
+    }
+
+    function stepEffects() {
+        for (const bit of debris) {
+            bit.age += STEP;
+            bit.x += bit.vx;
+            bit.y += bit.vy;
+            if (bit.puff) {
+                bit.vx *= 0.94;
+                bit.vy *= 0.94;
+            } else {
+                bit.vy += 0.5;
+                bit.angle += bit.spin;
+            }
+        }
+        debris = debris.filter((bit) => bit.age < bit.life);
+        if (blast && (blast.age += STEP) > BLAST_MS) blast = null;
+    }
+
+    function restart(element, className, ms) {
+        element.classList.remove(className);
+        void element.offsetWidth; // lets the CSS animation start over
+        element.classList.add(className);
+        setTimeout(() => element.classList.remove(className), ms);
+    }
+
+    let audio = null;
+
+    function boomSound() {
+        try {
+            audio ||= new AudioContext();
+            audio.resume();
+            const now = audio.currentTime;
+            const length = 1.2;
+
+            const noise = audio.createBufferSource();
+            noise.buffer = audio.createBuffer(1, audio.sampleRate * length, audio.sampleRate);
+            const samples = noise.buffer.getChannelData(0);
+            for (let i = 0; i < samples.length; i++) samples[i] = random(-1, 1);
+            const filter = audio.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(1400, now);
+            filter.frequency.exponentialRampToValueAtTime(60, now + length);
+
+            const thump = audio.createOscillator();
+            thump.frequency.setValueAtTime(120, now);
+            thump.frequency.exponentialRampToValueAtTime(28, now + 0.6);
+
+            const volume = audio.createGain();
+            volume.gain.setValueAtTime(0.3, now);
+            volume.gain.exponentialRampToValueAtTime(0.001, now + length);
+
+            noise.connect(filter).connect(volume);
+            thump.connect(volume);
+            volume.connect(audio.destination);
+            noise.start(now);
+            thump.start(now);
+            thump.stop(now + length);
+        } catch {
+            // No sound is fine.
+        }
+    }
+
     /* ---------- Finding the avatar ---------- */
 
     function checkFound() {
+        // The button stays on the floor, even while the head inside it is away flying.
         const box = avatar.getBoundingClientRect();
         let open = 0;
         for (let row = 1; row <= 5; row++) {
@@ -285,20 +514,167 @@
                 if (!Query.point(rocks, point).length) open++;
             }
         }
+        if (landing) {
+            if (open > 12 && rocks.some((rock) => !rock.isSleeping)) return;
+            landing = false;
+        }
         // Two thresholds, so that the hint does not flicker at the border.
         const now = found ? open > 9 : open > 15;
         if (now !== found) {
             found = now;
-            hint.textContent = found ? HINT_FOUND : HINT_BURIED;
+            if (!found) flown = false;
+            if (!dynamite) hint.textContent = found ? HINT_FOUND : HINT_BURIED;
+        }
+        if (found && open >= 24 && !flown && !dynamite && !reducedMotion.matches) {
+            flown = true;
+            // Covered in soot, it needs a moment to come round.
+            setTimeout(takeOff, avatar.classList.contains('sooty') ? 3800 : 1800);
         }
     }
+
+    function takeOff() {
+        if (story.open) {
+            story.addEventListener('close', () => setTimeout(takeOff, 600), { once: true });
+            return;
+        }
+        if (!found || avatar.matches('.flying, .hatless')) return;
+        avatar.classList.remove('sooty');
+        if (flights++ % 2) {
+            hint.textContent = HINT_FLYING;
+            avatar.classList.add('flying');
+            return;
+        }
+        hint.textContent = HINT_CAP;
+        avatar.classList.add('hatless');
+        setTimeout(() => {
+            if (hint.textContent === HINT_CAP) hint.textContent = HINT_STORK;
+        }, 3000);
+    }
+
+    avatar.addEventListener('animationend', (event) => {
+        if (!['flight', 'cap'].includes(event.animationName)) return;
+        avatar.classList.remove('flying', 'hatless');
+        if ([HINT_FLYING, HINT_STORK].includes(hint.textContent)) hint.textContent = found ? HINT_FOUND : HINT_BURIED;
+    });
 
     /* ---------- Drawing ---------- */
 
     function draw() {
         ctx.clearRect(0, 0, width, height);
         ctx.lineJoin = 'round';
+        ctx.save();
+        if (blast && !reducedMotion.matches) {
+            const shake = 14 * Math.max(0, 1 - blast.age / 450);
+            ctx.translate(random(-shake, shake), random(-shake, shake));
+        }
         for (const rock of rocks) drawRock(rock);
+        if (dynamite) drawDynamite();
+        for (const bit of debris) drawDebris(bit);
+        if (blast) drawBlast();
+        ctx.restore();
+    }
+
+    function drawDebris(bit) {
+        const left = 1 - bit.age / bit.life;
+        ctx.save();
+        ctx.translate(bit.x, bit.y);
+        ctx.strokeStyle = INK;
+        if (bit.puff) {
+            ctx.globalAlpha = Math.min(1, left * 2);
+            ctx.beginPath();
+            ctx.arc(0, 0, bit.puff * (1.5 - left), 0, Math.PI * 2);
+            ctx.fillStyle = '#8f8a92';
+            ctx.lineWidth = 3;
+        } else {
+            ctx.globalAlpha = Math.min(1, left * 4);
+            ctx.rotate(bit.angle);
+            trace(bit.points);
+            ctx.fillStyle = bit.color;
+            ctx.lineWidth = 2;
+        }
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    function star(spikes, outer, inner) {
+        return spikes.flatMap((reach, i) => {
+            const step = Math.PI / spikes.length;
+            const point = (r, angle) => ({ x: Math.cos(angle) * r * 1.25, y: Math.sin(angle) * r });
+            return [point(outer * reach, i * 2 * step), point(inner, (i * 2 + 1) * step)];
+        });
+    }
+
+    function drawBlast() {
+        const { age, spikes } = blast;
+        const size = Math.min(width * 0.34, height * 0.36);
+        const grow = Math.min(1, age / 110);
+        const shrink = clamp((BLAST_MS - age) / 180, 0, 1);
+        const scale = reducedMotion.matches ? 1 : Math.max(0.01, grow * (1 + 0.15 * Math.sin(grow * Math.PI)) * shrink);
+
+        ctx.save();
+        ctx.translate(blast.x, Math.min(blast.y, height - size * 0.9));
+        ctx.scale(scale, scale);
+        ctx.rotate(-0.1);
+        ctx.strokeStyle = INK;
+        ctx.lineWidth = 5;
+        for (const [color, outer, inner] of [[RED, 1, 0.76], [PAPER, 0.86, 0.66]]) {
+            trace(star(spikes, size * outer, size * inner));
+            ctx.fillStyle = color;
+            ctx.fill();
+            ctx.stroke();
+        }
+        ctx.font = `${size * 0.32}px "Dela Gothic One", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = INK;
+        ctx.fillText(BOOM_WORD, 0, 0);
+        ctx.restore();
+    }
+
+    function drawDynamite() {
+        const { body, size, fuse } = dynamite;
+        const stickWidth = (size * 1.1) / 3;
+        const stickHeight = size * 0.8;
+        const left = fuse / FUSE_MS;
+
+        ctx.save();
+        ctx.translate(body.position.x, body.position.y);
+        ctx.rotate(body.angle);
+        ctx.strokeStyle = INK;
+        ctx.lineCap = 'round';
+
+        const tip = { x: size * 0.45 * left, y: -stickHeight / 2 - size * 0.38 * left };
+        ctx.beginPath();
+        ctx.moveTo(0, -stickHeight / 2);
+        ctx.quadraticCurveTo(0, tip.y, tip.x, tip.y);
+        ctx.lineWidth = 4;
+        ctx.stroke();
+
+        ctx.lineWidth = 3;
+        for (let i = -1; i <= 1; i++) {
+            ctx.beginPath();
+            ctx.rect(i * stickWidth - stickWidth / 2, -stickHeight / 2, stickWidth, stickHeight);
+            ctx.fillStyle = RED;
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = 'rgb(255 255 255 / 0.3)';
+            ctx.fillRect(i * stickWidth - stickWidth * 0.3, -stickHeight * 0.42, stickWidth * 0.16, stickHeight * 0.84);
+        }
+        ctx.beginPath();
+        ctx.rect(-size * 0.57, -stickHeight * 0.14, size * 1.14, stickHeight * 0.28);
+        ctx.fillStyle = '#f2d9a0';
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.translate(tip.x, tip.y);
+        ctx.rotate(random(0, Math.PI));
+        trace(star([1, 1, 1, 1, 1, 1], size * random(0.16, 0.26), size * 0.08));
+        ctx.fillStyle = Math.random() < 0.5 ? PAPER : '#ff9d2e';
+        ctx.lineWidth = 2;
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
     }
 
     function trace(points) {
@@ -355,7 +731,7 @@
     const rockAt = (event) => {
         if (gathering || story.open) return null;
         // The last rock is drawn on top.
-        return Query.point(rocks, { x: event.clientX, y: event.clientY }).pop() || null;
+        return Query.point(things(), { x: event.clientX, y: event.clientY }).pop() || null;
     };
 
     function grab(event, rock) {
@@ -423,8 +799,11 @@
         }
         lastTap = { x: event.clientX, y: event.clientY, time: event.timeStamp };
 
-        if (held?.rock.look.word) {
+        if (held?.rock.look?.gold) hint.textContent = HINT_GOLD;
+        if (held?.rock.look?.word) {
             hint.textContent = `“${held.rock.look.word}” is ${held.rock.look.language} for “stone”.`;
+            if (held.rock.look.word === 'stone') hint.textContent += ' Obviously.';
+            if (held.rock.look.word === HOME[0]) hint.textContent += ' Russian spells it the same.';
         }
     });
 
@@ -450,9 +829,100 @@
         if (grabs.size) event.preventDefault();
     });
 
-    /* ---------- Controls ---------- */
+    /* ---------- Phone: tilt and shake ---------- */
+
+    function onTilt({ beta, gamma }) {
+        if (beta === null || gamma === null) return;
+        tiltButton.hidden = true;
+        const b = (beta * Math.PI) / 180;
+        const g = (gamma * Math.PI) / 180;
+        // Gravity along the sides of the phone, then along the sides of the screen.
+        const right = Math.cos(b) * Math.sin(g);
+        const down = Math.sin(b);
+        const angle = screen.orientation?.angle ?? 0;
+        const turned = { 0: [right, down], 90: [down, -right], 180: [-right, -down], 270: [-down, right] };
+        const [x, y] = turned[angle] || turned[0];
+
+        // Lying flat or upside down still keeps the rocks on the floor.
+        const next = { x: Math.abs(x) < 0.15 ? 0 : clamp(x * 1.3, -1, 1), y: clamp(y, 0.35, 1) };
+        if (Math.hypot(next.x - tilt.x, next.y - tilt.y) < 0.12) return;
+        tilt = next;
+        engine.gravity.x = next.x;
+        engine.gravity.y = next.y;
+        wake();
+    }
+
+    function onShake({ acceleration }, now = performance.now()) {
+        if (!acceleration || acceleration.x === null || gathering || story.open) return;
+        const force = Math.hypot(acceleration.x, acceleration.y, acceleration.z);
+        if (force < 18 || now - lastShake < 900) return;
+        lastShake = now;
+        wake();
+        for (const rock of rocks) {
+            if (rock.flung) continue;
+            Body.setVelocity(rock, { x: random(-26, 26), y: random(-26, -8) });
+            Body.setAngularVelocity(rock, random(-0.3, 0.3));
+        }
+    }
+
+    let tilt = { x: 0, y: 1 };
+    let lastShake = 0;
+
+    function followPhone() {
+        addEventListener('deviceorientation', onTilt);
+        addEventListener('devicemotion', onShake);
+    }
+
+    // Most phones send motion data right away. iPhones stay silent until the visitor
+    // allows it, so the button is there until the first real reading.
+    if (!reducedMotion.matches && matchMedia('(pointer: coarse)').matches) {
+        followPhone();
+        tiltButton.hidden = typeof window.DeviceOrientationEvent?.requestPermission !== 'function';
+    }
+
+    tiltButton.addEventListener('click', async () => {
+        try {
+            if (await DeviceOrientationEvent.requestPermission() !== 'granted') return;
+            tiltButton.hidden = true;
+            story.close();
+        } catch {
+            tiltButton.hidden = true;
+        }
+    });
+
+    /* ---------- Secret words ---------- */
+
+    function pourRocks() {
+        const room = CAP_ROCKS - rocks.length - blownAway.length;
+        const unit = avatar.offsetHeight * 0.17;
+        for (let i = 0; i < Math.min(room, 10); i++) {
+            const rock = createPlainRock(unit);
+            Body.setPosition(rock, { x: random(width * 0.15, width * 0.85), y: -60 - i * unit * 2.4 });
+            Composite.add(engine.world, rock);
+            rocks.unshift(rock);
+        }
+        wake();
+        if (reducedMotion.matches) settle();
+    }
+
+    let typed = '';
+    let pressed = ''; // the same keys as on a Latin layout
+
+    addEventListener('keydown', (event) => {
+        if (event.ctrlKey || event.metaKey || event.altKey || event.repeat || story.open || gathering) return;
+        if (event.key.length === 1) typed = (typed + event.key.toLowerCase()).slice(-10);
+        if (event.code.startsWith('Key')) pressed = (pressed + event.code.slice(3).toLowerCase()).slice(-10);
+        if (SECRET_WORDS.some((word) => typed.endsWith(word)) || pressed.endsWith('rock')) {
+            typed = '';
+            pressed = '';
+            pourRocks();
+        }
+    });
+
+    /* ---------- Buttons ---------- */
 
     gatherButton.addEventListener('click', gather);
+    dynamiteButton.addEventListener('click', throwDynamite);
     avatar.addEventListener('click', () => story.showModal());
     story.addEventListener('click', (event) => {
         if (event.target !== story) return;

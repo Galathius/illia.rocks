@@ -40,11 +40,36 @@
         <div class="play" id="play" hidden>
             <p class="hint" id="hint" role="status">Someone is buried here. Throw some rocks.</p>
             <button class="gather" id="gather" type="button">Gather stones</button>
+            <button class="dynamite" id="dynamite" type="button">Dynamite</button>
         </div>
     </main>
 
     <button class="avatar" id="avatar" type="button" aria-haspopup="dialog" aria-label="Why rocks?">
-        <img src="./avatar.webp" alt="" width="512" height="512" draggable="false">
+        <span class="flyer" id="flyer">
+            <img src="./avatar-body.webp" alt="" width="512" height="512" draggable="false">
+            <svg class="stork" viewBox="0 0 220 210" aria-hidden="true">
+                <g fill="none" stroke="#211c24" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+                    <g class="bird">
+                        <path d="M84 130v54M104 130v54" stroke-width="13"/>
+                        <path d="M84 130v54M104 130v54" stroke="#e2302b" stroke-width="6"/>
+                        <path d="M122 104C142 88 118 66 136 44" stroke-width="32"/>
+                        <path d="M50 118C62 84 108 80 130 98C146 112 132 144 98 146C76 147 58 138 50 118Z" fill="#fff"/>
+                        <path d="M122 104C142 88 118 66 136 44" stroke="#fff" stroke-width="22"/>
+                        <path d="M58 112C78 98 104 104 112 118C100 138 60 144 22 138C36 132 46 122 58 112Z" fill="#211c24"/>
+                        <path class="beak-bottom" d="M148 46L206 56L150 54Z" fill="#e2302b"/>
+                        <path class="beak-top" d="M148 34L210 50L148 46Z" fill="#e2302b"/>
+                        <circle cx="138" cy="40" r="17" fill="#fff"/>
+                        <circle cx="143" cy="37" r="2.5" fill="#211c24"/>
+                    </g>
+                    <path d="M28 178C40 172 160 172 172 178C170 202 136 208 100 208C64 208 30 202 28 178Z" fill="#a9763a"/>
+                    <path d="M20 176L70 190M60 172L120 198M180 172L120 190M130 174L70 204M34 190L90 182M112 180L168 194" stroke-width="4"/>
+                </g>
+            </svg>
+            <span class="cap">
+                <img src="./avatar-cap.webp" alt="" width="512" height="200" draggable="false">
+                <img class="propeller" src="./avatar-propeller.webp" alt="" width="512" height="96" draggable="false">
+            </span>
+        </span>
     </button>
 
     <canvas class="stage" id="stage" aria-hidden="true"></canvas>
@@ -58,7 +83,10 @@
             <cite>Ecclesiastes 3:5</cite>
         </blockquote>
         <p>Tap twice to gather stones.</p>
-        <form method="dialog"><button class="close">Back to the rocks</button></form>
+        <form method="dialog">
+            <button class="close">Back to the rocks</button>
+            <button class="close" id="tilt" type="button" hidden>Let the phone tilt them</button>
+        </form>
     </dialog>
 </body>
 </html>
