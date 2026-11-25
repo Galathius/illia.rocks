@@ -1,206 +1,315 @@
+@font-face {
+    font-family: "Dela Gothic One";
+    src: url("./fonts/dela-gothic-one.woff2") format("woff2");
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "Golos Text";
+    src: url("./fonts/golos-text.woff2") format("woff2");
+    font-weight: 400 900;
+    font-display: swap;
+}
+
+/* The palette is taken from the avatar: yellow shirt, red bow tie, ink outline. */
+:root {
+    --sky: #ffd84a;
+    --ink: #211c24;
+    --text: var(--ink);
+    --accent: #c9201d;
+    --paper: #fff;
+    --avatar-size: clamp(112px, 24svh, 208px);
+    --display: "Dela Gothic One", "Arial Black", sans-serif;
+    --body: "Golos Text", system-ui, sans-serif;
+    color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --sky: #34406b;
+        --text: #fff3d0;
+        --accent: #ffd84a;
+    }
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html {
+    background: var(--sky);
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
 body {
-    background: #fafafa;
-    min-height: 100vh;
-    position: relative;
-    overflow-x: hidden;
-}
-
-.rock-pile-center {
-    position: relative;
-    width: 150px;
-    height: 150px;
-    margin: 0 auto 2rem auto;
-    z-index: 10;
-}
-
-.rock {
-    position: absolute;
-    font-size: 5rem;
-    cursor: move;
-    user-select: none;
-    transition: transform 0.1s ease;
-    z-index: 15;
-    touch-action: none;
-}
-
-.rock:hover {
-    transform: scale(1.1);
-}
-
-.rock.dragging {
-    z-index: 20;
-}
-
-.avatar {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 80px;
-    height: 80px;
-    border-radius: 50%;
-    object-fit: cover;
-    z-index: 5;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-    border: 3px solid #fff;
-    cursor: pointer;
-    transition: transform 0.2s ease;
-}
-
-.avatar:hover {
-    transform: translate(-50%, -50%) scale(1.05);
-}
-
-.comic-popup {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: white !important;
-    border: 4px solid #000;
-    border-radius: 30px;
-    padding: 1.5rem;
-    max-width: 400px;
-    min-width: 320px;
-    z-index: 1000;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-    display: none;
-    animation: popupAppear 0.3s ease-out;
-    color: #000 !important;
-}
-
-.comic-popup.show {
-    display: block;
-}
-
-.comic-popup h3 {
-    margin: 0 0 1rem 0;
-    color: #333;
-    font-size: 1.2rem;
-    text-align: center;
-}
-
-.comic-popup p {
     margin: 0;
-    color: #555;
-    line-height: 1.5;
-    text-align: center;
+    min-height: 100svh;
+    overflow-x: clip;
+    background: var(--sky);
+    color: var(--text);
+    font: 500 1.125rem/1.45 var(--body);
+    touch-action: manipulation;
 }
 
-.comic-popup-overlay {
+.intro {
+    padding: clamp(1.25rem, 4svh, 3rem) clamp(1.25rem, 4vw, 4rem) 0;
+}
+
+.name {
+    margin: 0;
+    font: 400 min(11.3vw, 24svh)/1 var(--display);
+    letter-spacing: -0.02em;
+}
+
+.role {
+    margin: 0.5em 0 0;
+    font-size: clamp(1.25rem, 2.2vw, 2rem);
+    line-height: 1.2;
+}
+
+.links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1.75rem;
+    margin-top: 1.25rem;
+}
+
+.links a {
+    padding: 0.4rem 0;
+    color: inherit;
+    font-weight: 600;
+    text-decoration: underline 3px;
+    text-underline-offset: 0.3em;
+}
+
+.links a:hover {
+    color: var(--accent);
+}
+
+.play {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem 1.25rem;
+    margin-top: 1rem;
+}
+
+.play[hidden] {
+    display: none;
+}
+
+.hint {
+    margin: 0;
+    text-wrap: balance;
+}
+
+.gather,
+.close {
+    padding: 0.5rem 1rem;
+    border: 3px solid var(--ink);
+    border-radius: 0.6rem 0.9rem 0.5rem 1rem;
+    background: var(--paper);
+    color: var(--ink);
+    font: 600 1rem/1.2 var(--body);
+    cursor: pointer;
+}
+
+.gather:hover,
+.close:hover {
+    background: var(--ink);
+    color: var(--paper);
+}
+
+:focus-visible {
+    outline: 4px solid var(--accent);
+    outline-offset: 4px;
+}
+
+/* Sits on the floor of the scene, behind the rocks drawn on the canvas. */
+.avatar {
     position: fixed;
-    top: 0;
-    left: 0;
+    bottom: 0;
+    left: 50%;
+    width: var(--avatar-size);
+    height: var(--avatar-size);
+    margin-left: calc(var(--avatar-size) / -2);
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+}
+
+.avatar img {
+    display: block;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.5);
-    display: none;
+    transform-origin: 50% 100%;
+    transition: transform 0.2s ease-out;
+    -webkit-user-drag: none;
+    user-select: none;
 }
 
-.comic-popup-overlay.show {
-    display: block;
+.avatar:hover img {
+    transform: scale(1.05);
 }
 
-.comic-popup {
-    z-index: 101 !important;
+.avatar:focus-visible {
+    z-index: 2;
+    outline-offset: -4px;
+    border-radius: 1rem;
 }
 
-@keyframes popupAppear {
-    0% {
-        opacity: 0;
-        transform: translate(-50%, -50%) scale(0.8);
-    }
-    100% {
-        opacity: 1;
-        transform: translate(-50%, -50%) scale(1);
-    }
-}
-
-.social-links {
-    display: flex;
-    gap: 1.5rem;
-    justify-content: center;
-    flex-wrap: wrap;
-    margin-top: 2rem;
-}
-
-.social-link {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.75rem 1.5rem;
-    background: #f8f9fa;
-    border: 1px solid #e9ecef;
-    border-radius: 8px;
-    color: #495057;
-    text-decoration: none;
-    font-weight: 500;
-    transition: all 0.2s ease;
-}
-
-.social-link:hover {
-    background: #e9ecef;
-    transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.main-content {
-    background: white;
-    border-radius: 12px;
-    padding: 3rem;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
-    border: 1px solid #e5e5e5;
-    max-width: 600px;
-    margin: 0 auto;
-}
-
-.instruction {
+/* Pointer events are handled on the window, so links under the canvas still work. */
+.stage {
     position: fixed;
-    top: 20px;
-    right: 20px;
-    background: #2d3748;
-    color: white;
-    padding: 1rem;
-    border-radius: 8px;
-    font-size: 0.9rem;
-    max-width: 250px;
-    z-index: 30;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    inset: 0;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
 }
 
-@media (max-width: 768px) {
-    .rock-pile {
-        width: 150px;
-        height: 120px;
-        bottom: 15px;
-        right: 15px;
+.can-grab,
+.can-grab * {
+    cursor: grab !important;
+}
+
+.grabbing,
+.grabbing * {
+    cursor: grabbing !important;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* A speech bubble coming out of the avatar's head. */
+.story {
+    width: min(28rem, calc(100vw - 2rem));
+    max-height: calc(100svh - 2rem);
+    margin: auto auto calc(var(--avatar-size) + 1.75rem);
+    padding: 1.5rem 1.75rem;
+    overflow: visible;
+    border: 4px solid var(--ink);
+    border-radius: 30px;
+    background: var(--paper);
+    color: var(--ink);
+    font-size: 1rem;
+}
+
+.story::backdrop {
+    background: color-mix(in srgb, var(--sky) 65%, transparent);
+}
+
+.story::before,
+.story::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    border: solid transparent;
+    border-bottom: 0;
+}
+
+.story::before {
+    margin-left: -20px;
+    border-width: 26px 20px 0;
+    border-top-color: var(--ink);
+}
+
+.story::after {
+    margin: -5px 0 0 -14px;
+    border-width: 20px 14px 0;
+    border-top-color: var(--paper);
+}
+
+.story[open] {
+    transform-origin: 50% 100%;
+    animation: say 0.2s ease-out;
+}
+
+@keyframes say {
+    from {
+        opacity: 0;
+        transform: scale(0.85);
+    }
+}
+
+.story h2 {
+    margin: 0 0 0.5rem;
+    font: 400 1.5rem/1.1 var(--display);
+}
+
+.story p {
+    margin: 0 0 0.75rem;
+}
+
+.story blockquote {
+    margin: 0 0 0.75rem;
+}
+
+.story blockquote p {
+    margin: 0;
+}
+
+.story cite {
+    font-size: 0.875rem;
+}
+
+/* Not enough room above the avatar: the bubble becomes a plain scrolling panel. */
+@media (max-height: 640px) {
+    .story {
+        margin: auto;
+        overflow: auto;
     }
 
-    .rock {
-        font-size: 1.5rem;
+    .story::before,
+    .story::after {
+        content: none;
+    }
+}
+
+@media (max-width: 600px) and (orientation: portrait) {
+    .name {
+        /* “Kamenka” is about 5.5em wide; fill the column between the gutters. */
+        font-size: calc((100vw - 2.5rem) / 5.55);
     }
 
-    .avatar {
-        width: 60px;
-        height: 60px;
-        bottom: 45px;
-        right: 45px;
+    .name span {
+        display: block;
     }
 
-    .main-content {
-        padding: 2rem;
-        margin: 1rem;
+    .story {
+        padding: 1.25rem;
+    }
+}
+
+/* Short landscape screens: text moves to the side so the pile has room. */
+@media (max-height: 480px) and (orientation: landscape) {
+    body {
+        font-size: 1rem;
     }
 
-    .social-links {
-        flex-direction: column;
-        align-items: center;
+    .name {
+        font-size: min(6vw, 16svh);
     }
 
-    .instruction {
-        top: 10px;
-        right: 10px;
-        max-width: 200px;
-        font-size: 0.8rem;
+    .links {
+        margin-top: 0.5rem;
+    }
+
+    .play {
+        margin-top: 0.5rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .story[open] {
+        animation: none;
+    }
+
+    .avatar img {
+        transition: none;
     }
 }
