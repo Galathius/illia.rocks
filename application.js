@@ -20,6 +20,8 @@
     const HINT_FLYING = 'Free at last!';
     const HINT_CAP = 'Hold on to your cap!';
     const HINT_STORK = 'A stork lives under the cap. In Belarusian it is “бусел”.';
+    const HINT_TILT = 'Now tilt the phone. Or turn it upside down.';
+    const HINT_NO_TILT = 'No motion access, so the rocks stay put.';
     const HINT_FUSE = 'Fire in the hole!';
     const HINT_GOLD = 'You found the golden rock. One visit in twenty has it.';
     const SECRET_WORDS = ['rock', 'камень', 'kamen', 'kamień'];
@@ -40,6 +42,8 @@
     const FUSE_MS = 2600;
     const BLAST_MS = 1000;
     const COLLIDE_ALL = 0xffffffff;
+    const NARROW = 700; // too little room to put rocks aside
+    const EDGE = 48;
     const TAP_MS = 300;
     const TAP_SLOP = 8;
     const WALL = 400;
@@ -63,12 +67,14 @@
     let blast = null; // { x, y, age, spikes }
     let debris = [];
     let bounds = [];
+    let ceiling = null; // only there while the phone is upside down
     let width = 0;
     let height = 0;
     let builtFor = 0; // avatar height the current rocks were made for
     let gathering = null;
     let found = false;
     let landing = true; // rocks are still falling, too early to say who is buried
+    let dug = false; // the visitor has moved rocks since they last fell
     let flown = false;
     let flights = 0;
     let frame = 0;
@@ -170,6 +176,22 @@
             Bodies.rectangle(width + WALL / 2, wallY, WALL, tall, solid),
         ];
         Composite.add(engine.world, bounds);
+        if (ceiling) {
+            Composite.remove(engine.world, ceiling);
+            ceiling = null;
+            hangCeiling();
+        }
+    }
+
+    function hangCeiling() {
+        const needed = engine.gravity.y < 0;
+        if (needed && !ceiling) {
+            ceiling = Bodies.rectangle(width / 2, -WALL / 2, width + WALL * 2, WALL, { isStatic: true, friction: 1 });
+            Composite.add(engine.world, ceiling);
+        } else if (!needed && ceiling) {
+            Composite.remove(engine.world, ceiling);
+            ceiling = null;
+        }
     }
 
     function resize() {
@@ -215,7 +237,7 @@
 
     function keepInside(rock) {
         const x = clamp(rock.position.x, 30, Math.max(30, width - 30));
-        const y = Math.min(rock.position.y, height - 10);
+        const y = clamp(rock.position.y, ceiling ? 10 : -Infinity, height - 10);
         if (x !== rock.position.x || y !== rock.position.y) Body.setPosition(rock, { x, y });
     }
 
@@ -239,7 +261,7 @@
             const { x, y } = body.position;
             if (body.flung) {
                 if (x < -200 || x > width + 200 || y < -200 || y > height + 200) blowAway(body);
-            } else if (x < 0 || x > width || y > height) {
+            } else if (x < 0 || x > width || y > height || (ceiling && y < 0)) {
                 keepInside(body);
             }
         }
@@ -279,6 +301,7 @@
     }
 
     function drop(bottom) {
+        dug = false;
         landing = true;
         rocks.forEach((rock, i) => {
             Body.setPosition(rock, columnSpot(i, bottom));
@@ -297,6 +320,7 @@
         hint.textContent = HINT_BURIED;
         found = false;
         flown = false;
+        dug = false;
         landing = true;
         callBack();
         if (reducedMotion.matches) {
@@ -374,6 +398,7 @@
         grabs.forEach((_, id) => release(id));
         if (dynamite) Composite.remove(engine.world, dynamite.body);
         dynamite = null;
+        dug = true;
         landing = false;
         hint.textContent = found ? HINT_FOUND : HINT_BURIED;
 
@@ -413,7 +438,7 @@
 
         restart(document.documentElement, 'boom', 450);
         const toAvatar = Math.hypot(at.x - width / 2, at.y - (height - avatar.offsetHeight / 2));
-        if (toAvatar < avatar.offsetHeight * 2 && !avatar.matches('.flying, .hatless')) restart(avatar, 'sooty', 3500);
+        if (toAvatar < avatar.offsetHeight * 2 && !avatar.matches('.flying, .hatless')) restart(avatar, 'sooty', 2200);
         wake();
     }
 
@@ -507,28 +532,31 @@
     function checkFound() {
         // The button stays on the floor, even while the head inside it is away flying.
         const box = avatar.getBoundingClientRect();
+        const isOpen = (x, y) => !Query.point(rocks, { x: box.left + box.width * x, y: box.top + box.height * y }).length;
         let open = 0;
         for (let row = 1; row <= 5; row++) {
             for (let column = 1; column <= 5; column++) {
-                const point = { x: box.left + (box.width * column) / 6, y: box.top + (box.height * row) / 6 };
-                if (!Query.point(rocks, point).length) open++;
+                if (isOpen(column / 6, row / 6)) open++;
             }
         }
+        // Nothing lies on the cap. On a phone there is no room to clear the whole body.
+        const capIsFree = [0.08, 0.2, 0.3, 0.42, 0.55].every((x) => [0.04, 0.14, 0.24, 0.34].every((y) => isOpen(x, y)));
         if (landing) {
             if (open > 12 && rocks.some((rock) => !rock.isSleeping)) return;
             landing = false;
         }
         // Two thresholds, so that the hint does not flicker at the border.
-        const now = found ? open > 9 : open > 15;
+        const uncovered = dug && capIsFree && open > 11;
+        const now = uncovered || (found ? open > 9 : open > 15);
         if (now !== found) {
             found = now;
             if (!found) flown = false;
             if (!dynamite) hint.textContent = found ? HINT_FOUND : HINT_BURIED;
         }
-        if (found && open >= 24 && !flown && !dynamite && !reducedMotion.matches) {
+        if (uncovered && !flown && !dynamite) {
             flown = true;
             // Covered in soot, it needs a moment to come round.
-            setTimeout(takeOff, avatar.classList.contains('sooty') ? 3800 : 1800);
+            setTimeout(takeOff, avatar.classList.contains('sooty') ? 2300 : 1200);
         }
     }
 
@@ -539,7 +567,7 @@
         }
         if (!found || avatar.matches('.flying, .hatless')) return;
         avatar.classList.remove('sooty');
-        if (flights++ % 2) {
+        if (flights++ % 2 && !reducedMotion.matches) {
             hint.textContent = HINT_FLYING;
             avatar.classList.add('flying');
             return;
@@ -548,13 +576,17 @@
         avatar.classList.add('hatless');
         setTimeout(() => {
             if (hint.textContent === HINT_CAP) hint.textContent = HINT_STORK;
-        }, 3000);
+        }, reducedMotion.matches ? 0 : 3000);
+        if (reducedMotion.matches) setTimeout(land, 8000); // no animation to wait for
+    }
+
+    function land() {
+        avatar.classList.remove('flying', 'hatless');
+        if ([HINT_FLYING, HINT_STORK].includes(hint.textContent)) hint.textContent = found ? HINT_FOUND : HINT_BURIED;
     }
 
     avatar.addEventListener('animationend', (event) => {
-        if (!['flight', 'cap'].includes(event.animationName)) return;
-        avatar.classList.remove('flying', 'hatless');
-        if ([HINT_FLYING, HINT_STORK].includes(hint.textContent)) hint.textContent = found ? HINT_FOUND : HINT_BURIED;
+        if (['flight', 'cap'].includes(event.animationName)) land();
     });
 
     /* ---------- Drawing ---------- */
@@ -735,6 +767,7 @@
     };
 
     function grab(event, rock) {
+        dug = true;
         const point = { x: event.clientX, y: event.clientY };
         const constraint = Constraint.create({
             pointA: point,
@@ -783,8 +816,20 @@
         }
     });
 
+    // On a narrow screen a rock dropped at the edge, or thrown at it, leaves the screen.
+    function throwOut(rock, x) {
+        if (width >= NARROW || rock === dynamite?.body || rock.flung) return;
+        const speed = rock.velocity.x;
+        const side = x < EDGE || speed < -14 ? -1 : x > width - EDGE || speed > 14 ? 1 : 0;
+        if (!side) return;
+        rock.flung = true;
+        rock.collisionFilter.mask = 0;
+        Body.setVelocity(rock, { x: side * Math.max(Math.abs(speed), 16), y: Math.min(rock.velocity.y, -4) });
+    }
+
     addEventListener('pointerup', (event) => {
         const held = release(event.pointerId);
+        if (held?.moved) throwOut(held.rock, event.clientX);
         const onControl = !held && event.target.closest?.('a, button, dialog');
         if (event.button !== 0 || held?.moved || onControl || story.open) {
             lastTap = null;
@@ -843,12 +888,17 @@
         const turned = { 0: [right, down], 90: [down, -right], 180: [-right, -down], 270: [-down, right] };
         const [x, y] = turned[angle] || turned[0];
 
-        // Lying flat or upside down still keeps the rocks on the floor.
-        const next = { x: Math.abs(x) < 0.15 ? 0 : clamp(x * 1.3, -1, 1), y: clamp(y, 0.35, 1) };
+        // Lying flat there is no telling where down is, so it stays where it was.
+        const pull = Math.hypot(x, y);
+        if (pull < 0.25) return;
+        const strength = clamp(pull * 1.3, 0.5, 1) / pull;
+        const next = { x: Math.abs(x) < 0.15 ? 0 : x * strength, y: y * strength };
         if (Math.hypot(next.x - tilt.x, next.y - tilt.y) < 0.12) return;
         tilt = next;
         engine.gravity.x = next.x;
         engine.gravity.y = next.y;
+        if (next.y < 0) dug = true;
+        hangCeiling();
         wake();
     }
 
@@ -857,6 +907,7 @@
         const force = Math.hypot(acceleration.x, acceleration.y, acceleration.z);
         if (force < 18 || now - lastShake < 900) return;
         lastShake = now;
+        dug = true;
         wake();
         for (const rock of rocks) {
             if (rock.flung) continue;
@@ -882,12 +933,12 @@
 
     tiltButton.addEventListener('click', async () => {
         try {
-            if (await DeviceOrientationEvent.requestPermission() !== 'granted') return;
-            tiltButton.hidden = true;
-            story.close();
+            const answer = await DeviceOrientationEvent.requestPermission();
+            hint.textContent = answer === 'granted' ? HINT_TILT : HINT_NO_TILT;
         } catch {
-            tiltButton.hidden = true;
+            hint.textContent = HINT_NO_TILT;
         }
+        tiltButton.hidden = true;
     });
 
     /* ---------- Secret words ---------- */

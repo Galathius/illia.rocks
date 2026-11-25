@@ -97,6 +97,7 @@ body {
     margin-top: 1rem;
 }
 
+.gather[hidden],
 .play[hidden] {
     display: none;
 }
@@ -306,7 +307,7 @@ body {
 }
 
 .sooty .flyer {
-    animation: soot 3.5s ease-in;
+    animation: soot 2.2s ease-in;
 }
 
 @keyframes soot {
@@ -403,16 +404,6 @@ body {
     margin: 0 0 0.75rem;
 }
 
-.story form {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-}
-
-.close[hidden] {
-    display: none;
-}
-
 .story blockquote {
     margin: 0 0 0.75rem;
 }
@@ -448,6 +439,19 @@ body {
         display: block;
     }
 
+    .hint {
+        width: 100%;
+    }
+
+    .play {
+        column-gap: 0.75rem;
+    }
+
+    .gather,
+    .dynamite {
+        padding-inline: 0.75rem;
+    }
+
     .story {
         padding: 1.25rem;
     }
@@ -478,8 +482,20 @@ body {
     }
 
     .boom .intro,
-    .sooty .flyer {
+    .sooty .flyer,
+    .hatless .cap,
+    .hatless .stork,
+    .hatless .stork *,
+    .hatless .propeller {
         animation: none;
+    }
+
+    .hatless .cap {
+        visibility: hidden;
+    }
+
+    .hatless .stork {
+        visibility: visible;
     }
 
     .flyer {

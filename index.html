@@ -41,6 +41,7 @@
             <p class="hint" id="hint" role="status">Someone is buried here. Throw some rocks.</p>
             <button class="gather" id="gather" type="button">Gather stones</button>
             <button class="dynamite" id="dynamite" type="button">Dynamite</button>
+            <button class="gather" id="tilt" type="button" aria-label="Let the phone tilt the rocks" hidden>Tilt</button>
         </div>
     </main>
 
@@ -83,10 +84,7 @@
             <cite>Ecclesiastes 3:5</cite>
         </blockquote>
         <p>Tap twice to gather stones.</p>
-        <form method="dialog">
-            <button class="close">Back to the rocks</button>
-            <button class="close" id="tilt" type="button" hidden>Let the phone tilt them</button>
-        </form>
+        <form method="dialog"><button class="close">Back to the rocks</button></form>
     </dialog>
 </body>
 </html>
